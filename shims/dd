@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# sunboot 'dd' - shim to read distribution files
+# depending on the if= path, either use the current linked tapefile
+# or read the actual file from a mounted CD-ROM
+
+echo "dd $@" >> /vagrant/cmd_history.txt
+
+BLOCKSIZE=512
+
+for p in $@
+do
+    IFS='=' read -r cmd param <<< $p
+    case $cmd in
+        bs)
+            BLOCKSIZE=$param
+            ;;
+        if)
+            INPUTFILE=$param
+            ;;
+    esac
+done
+
+case $INPUTFILE in
+    /dev*)
+        /bin/dd bs=$BLOCKSIZE if="/root/tapefile"
+        # increment the tape file
+        ;;
+    /usr/etc/install*)
+        /bin/dd bs=$BLOCKSIZE if=$INPUTFILE
+        ;;
+esac
+
+

@@ -1,0 +1,6 @@
+# General environment settings
+
+SERVERNAME=sunboot
+SERVERADDR=10.94.42.7
+NETMASK=255.255.255.0
+GATEWAY=10.94.42.1

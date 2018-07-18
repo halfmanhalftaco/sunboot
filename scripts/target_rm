@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# sunboot target_rm
+#
+# This script removes all traces of a given target from sunboot,
+# including its root filesystem, swap file, NFS exports, bootparams
+# entries, hostfile entries and ethers entries.
+# This does not delete the actual 'target' file, just the resulting install.
+#
+# Usage: target_rm [-f] target_name
+#
+# -f performs the operation without asking for confirmation.
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root" 
+   exit 1
+fi
+
+. /vagrant/scripts/utils.sh
+
+FORCE=0
+
+usage() {
+    >&2 echo "Usage: $(basename $0) [-f] target_name"
+    exit 1
+}
+
+if [ $# -eq 2 ] && [ $1 = '-f' ]; then 
+    FORCE=1; TARGET=$2; 
+elif [ $# -eq 2 ] && [ $2 = '-f' ]; then
+    FORCE=1; TARGET=$1; 
+elif [ $# -eq 1 ] && [ $1 != '-f' ]; then
+    TARGET=$1
+else
+    usage
+fi
+
+if [ ! -f /vagrant/targets/$TARGET ]; then
+    >&2 echo "No target \"$TARGET\" specified in targets directory."
+    exit 1
+fi
+
+if [ $FORCE -eq 0 ]; then
+    while true; do
+        read -p "Really delete all settings and data associated with target \"$TARGET\"? yes/[no]: " yn
+        case $yn in 
+            [yY]*) break;;
+            *) exit;;
+        esac
+    done
+fi
+
+. /vagrant/targets/$TARGET
+
+if [ -z $TARGETNAME ]; then 
+    >&2 echo "TARGETNAME is blank, exiting"
+    exit 1
+fi
+
+sed -i "/$TARGETADDR $TARGETNAME\$/d" /etc/hosts >/dev/null 2>&1
+sed -i "/^$TARGETNAME /d" /etc/bootparams >/dev/null 2>&1
+sed -i "/$(normal_ether $TARGETETHER) $TARGETNAME\$/d" /etc/ethers >/dev/null 2>&1
+sed -i "/ $TARGETADDR(/d" /etc/exports >/dev/null 2>&1
+sed -i "/^$TARGETNAME /d" /root/.rhosts >/dev/null 2>&1
+
+IPHEX=$(iphex $TARGETADDR)
+
+rm -f /srv/tftp/$IPHEX*
+rm -f /export/swap/$TARGETNAME
+rm -rf /export/root/$TARGETNAME
+
+echo "Target \"$TARGET\" removed."

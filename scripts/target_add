@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# sunboot target_add
+#
+# This script adds a new target to the system, prompting for
+# the critical variables if they are not specified on the command
+# line.
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root" 
+   exit 1
+fi
+
+echo "Not yet implemented!"
+exit 1

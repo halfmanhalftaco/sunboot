@@ -1,0 +1,5 @@
+.vagrant
+.idea
+.DS_Store
+sunos/*.iso
+

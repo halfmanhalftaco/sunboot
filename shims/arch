@@ -1,0 +1,5 @@
+#!/bin/bash
+
+. /vagrant/sunboot-settings
+
+echo $TARGETARCH

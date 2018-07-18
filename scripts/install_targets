@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# sunboot install_targets
+# run this script to automatically process the targets directory
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root" 
+   exit 1
+fi
+
+. /vagrant/sunboot-settings
+. /vagrant/scripts/functions.sh
+
+DISKFUL_COUNT=0
+
+function do_install() {
+    case $INSTALLMEDIA in
+        CDROM)
+            echo "Mounting CD-ROM image..."
+            cdrom_mount
+            cdrom_detect
+            cdrom_select_arch
+            ;;
+        TAPE)
+            echo "Tape media not yet supported."
+            exit 1
+            ;;
+    esac
+
+    case $INSTALLMETHOD in
+        DISKFUL)
+            echo "Copying $TARGETARCH miniroot to /export/root/$TARGETNAME"
+            cdrom_copy_miniroot
+            echo "Configuring NFS exports..."
+            configure_nfs
+            echo "Configuring bootparams..."
+            config_boot
+            DISKFUL_COUNT=$(($DISKFUL_COUNT+1))
+            DISKFUL_TARGET=$(basename $target)
+            ;;
+        DISKLESS)
+            echo "Creating diskless install..."
+            cdrom_install_diskless
+            configure_nfs
+            config_boot
+            ;;
+    esac
+}
+
+tcount=$(ls -1 /vagrant/targets | wc -l)
+if [ $tcount -eq 0 ]; then
+    echo "No targets specified."
+    exit 1
+fi
+
+for target in /vagrant/targets/* ; do
+    DISABLED=0
+    . $target
+    if [ $DISABLED -eq 1 ]; then continue; fi
+    if [ ! -d /export/root/$TARGETNAME ]; then
+        echo "--------------------------------------"
+        echo "Installing target \"$TARGETNAME\"..."
+        echo "--------------------------------------"
+        do_install
+        echo "--------------------------------------"
+        echo "Install complete for \"$TARGETNAME\"."
+        echo "--------------------------------------"
+    else
+        echo "Skipping \"$TARGETNAME\", root dir already exists"
+    fi
+done
+
+if [ $DISKFUL_COUNT -gt 1 ]; then
+    echo "More than one diskful install is configured!"
+    echo "use \"sudo mount_media <target name>\" to switch which target media is mounted to correctly install these targets."
+elif [ $DISKFUL_COUNT -eq 1 ]; then
+    /vagrant/scripts/mount_media $DISKFUL_TARGET     # ensure the media for the diskful install is mounted
+fi

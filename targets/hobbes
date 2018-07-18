@@ -1,0 +1,16 @@
+# SPARCstation IPC SunOS 4.1.4 Diskless Install Example
+
+TARGETARCH=sun4c
+TARGETNAME=hobbes
+TARGETETHER=8:0:20:a:7d:8f
+TARGETADDR=10.94.42.208
+TARGETSWAPSIZE=64
+
+# options: DISKLESS or DISKFUL
+INSTALLMETHOD=DISKLESS
+
+# options: CDROM or TAPE
+INSTALLMEDIA=CDROM
+
+# path (within 'sunos' directory) to the install CD-ROM or directory that contains 'tape1', 'tape2', etc. dirs
+INSTALLMEDIAPATH=solaris1.1.2.iso

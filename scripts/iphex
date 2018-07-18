@@ -1,0 +1,6 @@
+#!/bin/bash
+
+. /vagrant/scripts/functions.sh
+
+iphex $1
+echo

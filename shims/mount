@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# CD-ROM media should already be mounted to /usr/etc/install/tar
+echo "mount $@" >> /vagrant/cmd_history.txt

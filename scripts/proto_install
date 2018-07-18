@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# sunboot proto_install
+# Installs root filesystem prototypes and exec directories
+# for all of the architectures on the provided media.
+
+# Usage:
+# proto_install [-t CDROM|TAPE] path_to_media
+#
+# In the case of CDROM media, path_to_media should be a CDROM image (ISO9660)
+# For tape, the path should be a directory that contains subdirectories named
+# tape1, tape2, etc, each containing numbered files representing the tape
+# file layout.
+#
+# The script will inspect the media and take the appropriate steps to copy
+# everything needed to support booting clients.
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root" 
+   exit 1
+fi
+
+echo "Not yet implemented!"
+exit 1

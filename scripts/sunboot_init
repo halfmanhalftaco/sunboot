@@ -1,0 +1,82 @@
+#!/bin/bash
+
+. /vagrant/sunboot-settings
+
+echo "Renaming machine to '$SERVERNAME'..."
+cp /etc/hosts /etc/hosts.orig
+echo "$SERVERNAME" > /etc/hostname
+printf "127.0.0.1 localhost\n$SERVERADDR $SERVERNAME\n" > /etc/hosts
+/etc/init.d/hostname.sh
+invoke-rc.d rsyslog restart
+
+# Install required packages
+echo "Installing packages..."
+apt-get install -y rsync openbsd-inetd rsh-server rsh-client bootparamd \
+    nfs-kernel-server tftpd-hpa rarpd tcpdump >/dev/null 2>&1
+modprobe -a ufs
+
+# todo make rarpd/tftpd/bootparamd only listen on eth1 (and possibly only respond to our targets)
+
+echo "Adjusting kernel settings..."
+echo << EOF >> /etc/sysctl.conf
+net.ipv4.ip_no_pmtu_disc=1
+net.ipv4.ip_local_port_range = 2048 32767
+EOF
+sysctl -p
+
+echo "Enable rdate service..."
+sed -i 's/^#time/time/' /etc/inetd.conf
+systemctl restart openbsd-inetd
+
+# Set up server directories
+echo "Creating server directories..."
+mkdir -p /cdrom /usr/etc/install /export/{root,exec,swap,home,proto,miniroot,opt} /srv/tftp
+ln -sf /cdrom /usr/etc/install/tar
+
+# Setup NFS for v2/v3 support
+echo "Configuring NFS daemons..."
+sed -i 's/^RPCMOUNTDOPTS.*/RPCMOUNTDOPTS="--manage-gids --no-nfs-version 4"/' /etc/default/nfs-kernel-server
+sed -i 's/^NEED_STATD.*/NEED_STATD=yes/' /etc/default/nfs-common
+# todo: limit exports to our subnet
+echo "/export/exec *(ro,sync,no_root_squash,no_subtree_check)" >> /etc/exports
+echo "/export/home *(rw,sync,no_root_squash,no_subtree_check)" >> /etc/exports
+echo "/cdrom *(ro,sync,no_root_squash,no_subtree_check)" >> /etc/exports
+systemctl enable nfs-kernel-server >/dev/null 2>&1
+systemctl enable rpcbind >/dev/null 2>&1
+systemctl restart nfs-kernel-server
+systemctl restart rpcbind
+
+# Enable $SERVERNAME shims for rsh (mount, dd, mt)
+echo "Setting up rsh shims..."
+cat << EOF >> /root/.bashrc
+if [ $(ps -o comm= -p $PPID) == "in.rshd" ]; then 
+    export PATH=/vagrant/shims:\$PATH
+    export HISTFILE=/vagrant/rsh_history.txt
+    set -o history
+fi
+EOF
+
+# add our scripts to PATH in the user acct and in sudo
+sed -i 's#secure_path="#secure_path="/vagrant/scripts:#' /etc/sudoers
+echo 'export PATH=/vagrant/scripts:$PATH' >> ~vagrant/.bashrc
+
+# ensure our scripts are executable
+chmod 755 /vagrant/scripts/* /vagrant/shims/*
+
+# do dumb things; SunOS installers expect classful IP addressing
+# todo: change so this is only applied when SunOS <= 4.x.x targets are present
+echo "Configuring bridge interface..."
+IFS=. read -r i1 i2 i3 i4 <<< $SERVERADDR
+echo "iface eth1 inet static" >> /etc/network/interfaces
+echo "  address $SERVERADDR" >> /etc/network/interfaces
+if [ $i1 -lt 128 ]; then
+    echo "  netmask 255.0.0.0" >> /etc/network/interfaces
+elif [ $i1 -lt 192 ]; then
+    echo "  netmask 255.255.0.0" >> /etc/network/interfaces
+else
+    echo "  netmask 255.255.255.0" >> /etc/network/interfaces
+fi
+ifup eth1
+
+
+echo "sunboot initialization complete."

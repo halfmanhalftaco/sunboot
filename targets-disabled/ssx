@@ -1,0 +1,16 @@
+# SPARCclassic Solaris 2.3 Diskful Install Example
+
+TARGETARCH=sun4m
+TARGETNAME=ssx
+TARGETETHER=8:0:20:5:61:c2
+TARGETADDR=10.94.42.209
+TARGETSWAPSIZE=64
+
+# options: DISKLESS or DISKFUL
+INSTALLMETHOD=DISKFUL
+
+# options: CDROM or TAPE
+INSTALLMEDIA=CDROM
+
+# path (within 'sunos' directory) to the install CD-ROM or directory that contains 'tape1', 'tape2', etc. dirs
+INSTALLMEDIAPATH=solaris_2.3_sparc.iso

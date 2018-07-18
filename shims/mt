@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# sunboot 'mt' - emulate tape control commands (rewind/fastforward)
+#
+# mt [-f <device>] [command [parameter]]
+#
+# The -f <device> parameter is accepted but is ignored.
+#
+# Commands implemented:
+# fsf <index>
+# rew
+#
+
+echo "mt $@" >> /vagrant/cmd_history.txt
+
+while getopts "f:" opt; do
+    case opt in
+        f)
+            echo "Option -f specified, value: $OPTARG"
+            ;;
+        \?)
+            echo "Invalid option: -$OPTARG" >&2
+            exit 1
+            ;;
+        :)
+            echo "Option -$OPTARG requires a value." >&2
+            exit 1
+            ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+case $1 in
+    fsf)
+        FILENUM=$2
+        echo "Fast forward to file number $FILENUM"
+        # link correct tape file to /root/tapefile
+        ;;
+    rew)
+        echo "Rewind tape"
+        # link first tape file to /root/tapefile
+        ;;
+esac
