@@ -136,7 +136,7 @@ Examples:
 
 A `DISKFUL` install will configure the machine to boot into the installer for the operating system media provided. For SunOS 4.1.x this will boot the machine into `miniroot` and boot to a shell where one can run `format` to label local disks and then `suninstall` to perform an installation. For Solaris this will boot into the graphical installer if a keyboard is present.
 
-A `DISKFUL` install tries to emulate a full install of the operating system. Currently this is only supported for SunOS 4.1.x. All of the available software sets are extracted to disk and exported via NFS. The operating system is customized per the target configuration to set the IP address and hostname.
+A `DISKLESS` install tries to emulate a full install of the operating system. Currently this is only supported for SunOS 4.1.x. All of the available software sets are extracted to disk and exported via NFS. The operating system is customized per the target configuration to set the IP address and hostname.
 
 Install media should be placed in the provided `sunos` directory. Paths specified in `INSTALLMEDIAPATH` are relative to this directory.
 
