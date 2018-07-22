@@ -5,11 +5,36 @@ CDROM=/cdrom
 
 . /vagrant/scripts/utils.sh
 
+function netbsd_arch() {
+    local arch
+    case $1 in
+        sun2) arch=sun2;;
+        sun3*) arch=sun3;;
+        sun4[uv]*) arch=sparc64;;
+        sun4*) arch=sparc;;
+    esac
+    echo $arch
+}
+
+function netbsd_fetch() {
+    NETBSD_ARCH=$(netbsd_arch $TARGETARCH)
+    NETBSD_VERSION=$(expr $INSTALLMEDIA : "NetBSD-\(.*\)")
+    if [ ! -f /vagrant/sunos/NetBSD-$NETBSD_VERSION-$NETBSD_ARCH.iso ]; then
+        pushd /vagrant/sunos
+        wget http://$NETBSD_MIRROR/pub/NetBSD/iso/$NETBSD_VERSION/NetBSD-$NETBSD_VERSION-$NETBSD_ARCH.iso
+        wget http://$NETBSD_MIRROR/pub/NetBSD/iso/$NETBSD_VERSION/SHA512
+        if ! grep "NetBSD-$NETBSD_VERSION-$NETBSD_ARCH.iso" SHA512 | sha512sum -c; then
+            error_exit "SHA512 verification failed"
+        fi
+        popd
+    fi
+    INSTALLMEDIAPATH=NetBSD-$NETBSD_VERSION-$NETBSD_ARCH.iso
+}
+
 function cdrom_detect() {
     if [ -f $CDROM/.cdtoc ]; then
         if [ $(grep PRODNAME $CDROM/.cdtoc | cut -d '=' -f 2 | tr a-z A-Z) = "SOLARIS" ]; then 
-            SOLARIS=1
-            SUNOS=0
+            sunbootOS=solaris
             SOLARIS_VERSION=$(grep PRODVERS $CDROM/.cdtoc | cut -d '=' -f 2)
             echo "Found Solaris $SOLARIS_VERSION"
         fi
@@ -17,12 +42,15 @@ function cdrom_detect() {
         SUNOSTMP=$(grep sunos $CDROM/avail_arches | head -1)
         if [[ $SUNOSTMP =~ sunos\.(.*)$ ]]; then
                 SUNOS_VERSION="${BASH_REMATCH[1]}"
-                SUNOS=1
-                SOLARIS=0
+                sunbootOS=sunos
                 echo "Found SunOS $SUNOS_VERSION"
         fi
+    elif blkid -o value -s LABEL /dev/loop0 | grep NETBSD; then
+        sunbootOS=netbsd
+        NETBSD_VERSION=$(blkid -o value -s LABEL /dev/loop0)
+        echo "Found NetBSD $NETBSD_VERSION"
     else
-        error_exit "Unable to detect SunOS or Solaris on the CD-ROM."
+        error_exit "Unable to detect an operating system on the CD-ROM."
     fi
 }
 
@@ -80,12 +108,27 @@ function cdrom_select_arch_solaris() {
     fi
 }
 
-function cdrom_select_arch() {
-    if [ $SOLARIS -eq 1 ]; then
-        cdrom_select_arch_solaris
-    elif [ $SUNOS -eq 1 ]; then
-        cdrom_select_arch_sunos
+function cdrom_select_arch_netbsd() {
+    local netbsd_arch=$(netbsd_arch $TARGETARCH)
+    if [ ! -d /cdrom/$netbsd_arch ]; then
+        error_exit "Could not find the appropriate arch on the NetBSD CD-ROM: $netbsd_arch"
+    else   
+        SELECTEDARCH=$netbsd_arch
     fi
+}
+
+function cdrom_select_arch() {
+    case $sunbootOS in
+        solaris)
+            cdrom_select_arch_solaris
+            ;;
+        sunos)
+            cdrom_select_arch_sunos
+            ;;
+        netbsd)
+            cdrom_select_arch_netbsd
+            ;;
+    esac
 }
 
 function cdrom_mount() {
@@ -117,32 +160,35 @@ function cdrom_copy_miniroot() {
     if [ ! -d /export/miniroot/$SELECTEDARCH ]; then
         mkdir -p /export/miniroot/$SELECTEDARCH
 
-        # different steps if Solaris vs. SunOS
-
-        if [ $SUNOS -eq 1 ]; then
-            losetup -r /dev/loop1 $CDROM/export/exec/kvm/$TARGETARCH_sunos_*/miniroot_$TARGETARCH
-            mount -o ro,ufstype=sun /dev/loop1 /mnt
-            rsync -a /mnt/ /export/miniroot/$SELECTEDARCH
-            umount /mnt
-            mv /export/miniroot/$SELECTEDARCH/boot.$TARGETARCH /export/miniroot/$SELECTEDARCH/boot
-        elif [ $SOLARIS -eq 1 ]; then
-            pushd $CDROM/export/exec/kvm/$SELECTEDARCH
-            find . -depth -print | cpio -pdm /export/miniroot/$SELECTEDARCH >/dev/null 2>&1
-            popd
-            AARCH=$(expr $SELECTEDARCH : "\(.*\)\.$TARGETARCH\.$SELECTEDVERSION")
-            pushd $CDROM/export/exec/$AARCH.$SELECTEDVERSION/lib/fs/nfs
-            if [ -f inetboot.$SELECTEDARCH ]; then
-                cp inetboot.$SELECTEDARCH /export/miniroot/$SELECTEDARCH/inetboot
-            elif [ -f inetboot ]; then
-                cp inetboot /export/miniroot/$SELECTEDARCH/inetboot
-            else
-                error_exit "Could not find Solaris bootloader."
-            fi
-            popd
-        else
-            error_exit "Unknown operating system."
-        fi
-
+        case $sunbootOS in
+            sunos)
+                losetup -r /dev/loop1 $CDROM/export/exec/kvm/$TARGETARCH_sunos_*/miniroot_$TARGETARCH
+                mount -o ro,ufstype=sun /dev/loop1 /mnt
+                rsync -a /mnt/ /export/miniroot/$SELECTEDARCH
+                umount /mnt
+                mv /export/miniroot/$SELECTEDARCH/boot.$TARGETARCH /export/miniroot/$SELECTEDARCH/boot
+                ;;
+            solaris)
+                pushd $CDROM/export/exec/kvm/$SELECTEDARCH
+                find . -depth -print | cpio -pdm /export/miniroot/$SELECTEDARCH >/dev/null 2>&1
+                popd
+                AARCH=$(expr $SELECTEDARCH : "\(.*\)\.$TARGETARCH\.$SELECTEDVERSION")
+                pushd $CDROM/export/exec/$AARCH.$SELECTEDVERSION/lib/fs/nfs
+                if [ -f inetboot.$SELECTEDARCH ]; then
+                    cp inetboot.$SELECTEDARCH /export/miniroot/$SELECTEDARCH/inetboot
+                elif [ -f inetboot ]; then
+                    cp inetboot /export/miniroot/$SELECTEDARCH/inetboot
+                else
+                    error_exit "Could not find Solaris bootloader."
+                fi
+                popd
+                ;;
+            netbsd)
+                error_exit "Diskful install not yet available for NetBSD"
+                ;;
+            *)
+                error_exit "Unknown operating system $sunbootOS"
+        esac
     fi
     if [ -d /export/root/$TARGETNAME ]; then
         echo "Root directory /export/root/$TARGETNAME already exists, not overwriting."
@@ -152,15 +198,13 @@ function cdrom_copy_miniroot() {
     rsync -a /export/miniroot/$SELECTEDARCH/ /export/root/$TARGETNAME
 }
 
-function cdrom_install_diskless() {
+function cdrom_install_diskless_sunos() {
     # for SunOS 4.1.4 (possibly any 4.1.x CD-ROM release) this should do:
     # if new version/arch combo, extract proto root to /export/proto/arch_sunos_version
     # create new /export/root dir for target host from proto
     # untar distribution on top
     # move /usr into /export/exec/version_arch
     # configure hostname, network, etc in target root
-
-    if [ $SOLARIS -eq 1 ]; then error_exit "Solaris not yet supported"; fi
 
     ARCHTMP=sunos_$(echo $SELECTEDVERSION | tr . _)
 
@@ -253,22 +297,73 @@ EOF
     exportfs -ra
 }
 
+function cdrom_install_diskless_netbsd() {
+    if [ -d /export/root/$TARGETNAME ]; then error_exit "Target root directory already exists, will not overwrite."; fi
+
+    mkdir -p /export/root/$TARGETNAME/
+    pushd /export/root/$TARGETNAME
+    for f in $(ls $CDROM/$SELECTEDARCH/binary/sets/*.tgz | grep -v "/kern"); do
+        echo $f
+        tar xpfz $f --numeric-owner
+    done
+    if [ -z $NETBSD_KERNEL ]; then 
+        tar xpfz $CDROM/$SELECTEDARCH/binary/sets/kern-GENERIC.tgz --numeric-owner 
+    else
+        tar xpfz $CDROM/$SELECTEDARCH/binary/sets/kern-$NETBSD_KERNEL.tgz --numeric-owner 
+    fi
+
+    cp $CDROM/$SELECTEDARCH/installation/netboot/boot.net .
+
+    cat <<- EOF > etc/fstab
+    $SERVERNAME:/export/swap/$TARGETNAME   none  swap  sw,nfsmntpt=/swap
+    $SERVERNAME:/export/root/$TARGETNAME   /     nfs   rw 0 0
+    $SERVERNAME:/export/exec/NetBSD-$NETBSD_VERSION-$SELECTEDARCH    /usr  nfs   rw 0 0
+    $SERVERNAME:/export/home   /home nfs   rw 0 0
+EOF
+
+    echo "inet client netmask $NETMASK" > etc/ifconfig.le0
+    printf "$TARGETADDR $TARGETNAME\n$SERVERADDR $SERVERNAME\n" >> etc/hosts
+
+    rm -rf /export/exec/NetBSD-$NETBSD_VERSION-$SELECTEDARCH
+    mv usr /export/exec/NetBSD-$NETBSD_VERSION-$SELECTEDARCH
+    mkdir usr
+
+    popd
+}
+
+function cdrom_install_diskless() {
+    case $sunbootOS in
+        solaris) error_exit "Solaris not yet supported";;
+        sunos) cdrom_install_diskless_sunos;;
+        netbsd) cdrom_install_diskless_netbsd;;
+    esac
+}
+
+
+
 # Setup rarp, bootparams and rsh
 function config_boot() {
     ETHER=$(normal_ether $TARGETETHER)
     BOOTPARAMS="root=$SERVERNAME:/export/root/$TARGETNAME swap=$SERVERNAME:/export/swap/$TARGETNAME"
     BOOTPROGRAM="boot"
 
-    if [ $SOLARIS -eq 1 ]; then
-        BOOTPROGRAM="inetboot"
-        if [ $INSTALLMETHOD = "DISKFUL" ]; then
-            BOOTPARAMS="root=$SERVERNAME:/export/root/$TARGETNAME install=$SERVERNAME:$CDROM"
-        fi
-    fi
-
-    if [ $SUNOS -eq 1 ]; then
-        echo "$TARGETNAME root" > /root/.rhosts
-    fi
+    case $sunbootOS in
+        sunos)
+            echo "$TARGETNAME root" > /root/.rhosts
+            ;;
+        solaris)
+            BOOTPROGRAM="inetboot"
+            if [ $INSTALLMETHOD = "DISKFUL" ]; then
+                BOOTPARAMS="root=$SERVERNAME:/export/root/$TARGETNAME install=$SERVERNAME:$CDROM"
+            fi
+            ;;
+        netbsd)
+            BOOTPROGRAM=boot.net
+            BOOTPARAMS="root=$SERVERNAME:/export/root"
+            ;;
+        *)
+            error_exit "Unsupported OS: $sunbootOS"
+    esac
         
     # todo - remove existing entries before blindly adding them
     echo "$TARGETNAME $BOOTPARAMS" >> /etc/bootparams

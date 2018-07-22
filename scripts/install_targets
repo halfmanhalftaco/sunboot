@@ -14,7 +14,11 @@ fi
 DISKFUL_COUNT=0
 
 function do_install() {
+    
     case $INSTALLMEDIA in
+        NetBSD*)
+            netbsd_fetch
+            ;&
         CDROM)
             echo "Mounting CD-ROM image..."
             cdrom_mount
