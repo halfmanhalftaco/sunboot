@@ -5,14 +5,14 @@
 echo "Renaming machine to '$SERVERNAME'..."
 cp /etc/hosts /etc/hosts.orig
 echo "$SERVERNAME" > /etc/hostname
-printf "127.0.0.1 localhost\n$SERVERADDR $SERVERNAME\n" > /etc/hosts
+printf "127.0.0.1 localhost\n$SERVERADDR $SERVERNAME.$DOMAINNAME $SERVERNAME\n" > /etc/hosts
 /etc/init.d/hostname.sh
 invoke-rc.d rsyslog restart
 
 # Install required packages
 echo "Installing packages..."
 apt-get install -y rsync openbsd-inetd rsh-server rsh-client bootparamd \
-    nfs-kernel-server tftpd-hpa rarpd tcpdump >/dev/null 2>&1
+    nfs-kernel-server tftpd-hpa rarpd isc-dhcp-server dnsmasq tcpdump >/dev/null 2>&1
 modprobe -a ufs
 
 # todo make rarpd/tftpd/bootparamd only listen on eth1 (and possibly only respond to our targets)
@@ -46,6 +46,30 @@ systemctl enable rpcbind >/dev/null 2>&1
 systemctl restart nfs-kernel-server
 systemctl restart rpcbind
 
+echo "Setting up DHCPD..."
+
+sed -i 's/^INTERFACES=""/INTERFACES="eth1"/' /etc/default/isc-dhcp-server
+
+local network=$(getnetwork $SERVERADDR $NETMASK)
+cat << EOF > /etc/dhcp/dhcpd.conf
+option domain-name $DOMAINNAME;
+option domain-name-servers $SERVERNAME;
+option routers $GATEWAY;
+option subnet-mask $NETMASK;
+log-facility local7;
+
+subnet $network netmask $NETMASK { ignore unknown-clients; }
+EOF
+
+systemctl restart isc-dhcp-server
+
+echo "Setting up DNS..."
+
+sed -i 's/^#interface=/interface=eth1/' /etc/dnsmasq.conf
+sed -i 's/^#no-dhcp-interface=/no-dhcp-interface=eth1/' /etc/dnsmasq.conf
+
+systemctl restart dnsmasq
+
 # Enable $SERVERNAME shims for rsh (mount, dd, mt)
 echo "Setting up rsh shims..."
 cat << EOF >> /root/.bashrc
@@ -67,14 +91,14 @@ chmod 755 /vagrant/scripts/* /vagrant/shims/*
 # todo: change so this is only applied when SunOS <= 4.x.x targets are present
 echo "Configuring bridge interface..."
 IFS=. read -r i1 i2 i3 i4 <<< $SERVERADDR
-echo "iface eth1 inet static" >> /etc/network/interfaces
-echo "  address $SERVERADDR" >> /etc/network/interfaces
+printf "allow-hotplug eth1\niface eth1 inet static\n" >> /etc/network/interfaces
+printf "\taddress $SERVERADDR\n" >> /etc/network/interfaces
 if [ $i1 -lt 128 ]; then
-    echo "  netmask 255.0.0.0" >> /etc/network/interfaces
+    printf "\tnetmask 255.0.0.0\n" >> /etc/network/interfaces
 elif [ $i1 -lt 192 ]; then
-    echo "  netmask 255.255.0.0" >> /etc/network/interfaces
+    echo "\tnetmask 255.255.0.0\n" >> /etc/network/interfaces
 else
-    echo "  netmask 255.255.255.0" >> /etc/network/interfaces
+    echo "\tnetmask 255.255.255.0\n" >> /etc/network/interfaces
 fi
 ifup eth1
 

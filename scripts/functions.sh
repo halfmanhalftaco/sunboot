@@ -19,10 +19,17 @@ function netbsd_arch() {
 function netbsd_fetch() {
     NETBSD_ARCH=$(netbsd_arch $TARGETARCH)
     NETBSD_VERSION=$(expr $INSTALLMEDIA : "NetBSD-\(.*\)")
+    ARCHIVE=$(vercomp $NETBSD_VERSION "7.0")
+    if [ $ARCHIVE != 2 ]; then
+        NETBSD_BASE_URI=http://$NETBSD_MIRROR/pub/NetBSD/iso
+    else
+        NETBSD_BASE_URI=http://$NETBSD_MIRROR/pub/NetBSD-archive/iso
+    fi
     if [ ! -f /vagrant/sunos/NetBSD-$NETBSD_VERSION-$NETBSD_ARCH.iso ]; then
         pushd /vagrant/sunos
-        wget http://$NETBSD_MIRROR/pub/NetBSD/iso/$NETBSD_VERSION/NetBSD-$NETBSD_VERSION-$NETBSD_ARCH.iso
-        wget http://$NETBSD_MIRROR/pub/NetBSD/iso/$NETBSD_VERSION/SHA512
+        rm -f SHA512
+        wget -nv $NETBSD_BASE_URI/$NETBSD_VERSION/NetBSD-$NETBSD_VERSION-$NETBSD_ARCH.iso
+        wget -nv $NETBSD_BASE_URI/$NETBSD_VERSION/SHA512
         if ! grep "NetBSD-$NETBSD_VERSION-$NETBSD_ARCH.iso" SHA512 | sha512sum -c; then
             error_exit "SHA512 verification failed"
         fi
@@ -312,7 +319,8 @@ function cdrom_install_diskless_netbsd() {
         tar xpfz $CDROM/$SELECTEDARCH/binary/sets/kern-$NETBSD_KERNEL.tgz --numeric-owner 
     fi
 
-    cp $CDROM/$SELECTEDARCH/installation/netboot/boot.net .
+    # TODO: depending on version this can be boot.net or boot, add checks to pick one
+    cp $CDROM/$SELECTEDARCH/installation/netboot/boot .
 
     cat <<- EOF > etc/fstab
     $SERVERNAME:/export/swap/$TARGETNAME   none  swap  sw,nfsmntpt=/swap
@@ -358,8 +366,8 @@ function config_boot() {
             fi
             ;;
         netbsd)
-            BOOTPROGRAM=boot.net
-            BOOTPARAMS="root=$SERVERNAME:/export/root"
+            BOOTPROGRAM=netboot
+            BOOTPARAMS="root=$SERVERNAME:/export/root/$TARGETNAME"
             ;;
         *)
             error_exit "Unsupported OS: $sunbootOS"

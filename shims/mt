@@ -16,14 +16,14 @@ echo "mt $@" >> /vagrant/cmd_history.txt
 while getopts "f:" opt; do
     case opt in
         f)
-            echo "Option -f specified, value: $OPTARG"
+            echo "Option -f specified, value: $OPTARG" >> /vagrant/cmd_history.txt
             ;;
         \?)
-            echo "Invalid option: -$OPTARG" >&2
+            echo "Invalid option: -$OPTARG" >&2 >> /vagrant/cmd_history.txt
             exit 1
             ;;
         :)
-            echo "Option -$OPTARG requires a value." >&2
+            echo "Option -$OPTARG requires a value." >&2 >> /vagrant/cmd_history.txt
             exit 1
             ;;
     esac
@@ -32,13 +32,23 @@ done
 shift $((OPTIND-1))
 
 case $1 in
+    asf)
+        FILENUM=$(printf "%02d" $2)
+        echo "Position to file number $FILENUM" >> /vagrant/cmd_history.txt
+        rm -f /root/tapefile
+        ln -s /vagrant/sunos/tape/$FILENUM /root/tapefile
+        ;;
     fsf)
         FILENUM=$2
-        echo "Fast forward to file number $FILENUM"
+        echo "Fast forward to file number $FILENUM" >> /vagrant/cmd_history.txt
         # link correct tape file to /root/tapefile
+        rm -f /root/tapefile
+        ln -s /vagrant/sunos/tape/$FILENUM /root/tapefile
         ;;
     rew)
-        echo "Rewind tape"
+        echo "Rewind tape" >> /vagrant/cmd_history.txt
         # link first tape file to /root/tapefile
+        rm -f /root/tapefile
+        ln -s /vagrant/sunos/tape/00 /root/tapefile
         ;;
 esac

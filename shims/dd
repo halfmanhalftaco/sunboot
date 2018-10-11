@@ -21,10 +21,17 @@ do
     esac
 done
 
+echo ":dd BLOCKSIZE=$BLOCKSIZE, INPUTFILE=$INPUTFILE" >> /vagrant/cmd_history.txt
+
+# TODO: determine which host is calling and direct to correct tapefile/cdrom mount
+
 case $INPUTFILE in
     /dev*)
         /bin/dd bs=$BLOCKSIZE if="/root/tapefile"
         # increment the tape file
+        CURFILE=basename $(readfile -f /root/tapefile)
+        NEWFILE=$(printf "%02d" "$(($CURFILE + 1))")
+        ln -sf /vagrant/sunos/tape/$NEWFILE /root/tapefile
         ;;
     /usr/etc/install*)
         /bin/dd bs=$BLOCKSIZE if=$INPUTFILE

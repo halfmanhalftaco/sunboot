@@ -1,0 +1,8 @@
+#!/bin/bash -x
+
+echo "sh $@" >> /vagrant/cmd_history.txt
+
+# SunOS 4.1.1 (at least) checks for existance of tape devices when using a remote tape target
+# just blindly say yes to any of them
+
+echo yes

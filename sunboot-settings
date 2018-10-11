@@ -1,6 +1,7 @@
 # General environment settings
 
 SERVERNAME=sunboot
+DOMAINNAME=retro.halfmanhalftaco.com
 SERVERADDR=10.94.42.7
 NETMASK=255.255.255.0
 GATEWAY=10.94.42.1
